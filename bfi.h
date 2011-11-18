@@ -4,7 +4,8 @@
 #include<unistd.h>
 
 #define MEM_SIZE 30000
-#define INPUT_USR_SPEC 1
+#define MAX_PROGBUF 1048576
+#define FILE_INPUT 1
 
 uint8_t *bf_interpret(uint8_t *mem, FILE *stream);
 

@@ -19,20 +19,24 @@ uint8_t  *bf_interpret(uint8_t *mem, FILE *stream){
             case '.': fputc(*mem, stdout);break;
             case ',': *mem = fgetc(stdin);break;
             case '[':
-                pc = ftell(stream);
-                while(*mem){
+                if(*mem){
+                    pc = ftell(stream);
                     mem = bf_interpret(mem, stream);
-                    fseek(stream, pc, SEEK_SET);
-                }
-                level = 1;
-                do{
-                    input = (char)fgetc(stream);
-                    if(input == '['){
-                        level++;
-                    }else if(input == ']'){
-                        level--;
+                    while(*mem){
+                        fseek(stream, pc, SEEK_SET);
+                        mem = bf_interpret(mem, stream);
                     }
-                }while(input != EOF && level);
+                }else{
+                    level = 1;
+                    do{
+                        input = (char)fgetc(stream);
+                        if(input == '['){
+                            level++;
+                        }else if(input == ']'){
+                            level--;
+                        }
+                    }while(input != EOF && level);
+                }
                 break;
             case ']':
                 return mem;
@@ -54,7 +58,6 @@ int main(int argc, char **argv){
                 return 0;
             case 'h':
                 printf("Usage: ./bfi FILE to read from FILE\n");
-                printf("       ./bfi      to read from stdin\n");
                 return 0;
         }
     }
@@ -65,7 +68,10 @@ int main(int argc, char **argv){
             fprintf(stderr, "Could not open file: %s\n", argv[optind]);
             return 1;
         }
-        st_flags |= INPUT_USR_SPEC;
+        st_flags |= FILE_INPUT;
+    }else{
+        fprintf(stderr, "%s\n", "Error: must specify a FILE to run");
+        return 1;
     }
 
     uint8_t *membuf = calloc(MEM_SIZE, sizeof(uint8_t));
@@ -76,6 +82,9 @@ int main(int argc, char **argv){
 
     bf_interpret(membuf, input);
 
+    if(st_flags & FILE_INPUT){
+        fclose(input);
+    }
     free(membuf);
     return 0;
 }
