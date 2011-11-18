@@ -1,0 +1,6 @@
+bfi - a tiny brainfuck interpreter
+Written by Ken Sheedlo
+
+To compile: ./make
+To run: ./bfi FILE
+To run from stdin: ./bfi
