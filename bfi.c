@@ -3,13 +3,11 @@
 
 #include "bfi.h"
 
-char *progc;
-
-uint8_t *bf_interpret(uint8_t *mem){
+uint8_t *bf_interpret(uint8_t *mem, char *program, char **offset){
     char input;
     int32_t level;
 
-    while((input = *progc++) != EOF){
+    while((input = *program++) != EOF){
         switch(input){
             case '>': ++mem;break;
             case '<': --mem;break;
@@ -19,15 +17,15 @@ uint8_t *bf_interpret(uint8_t *mem){
             case ',': *mem = fgetc(stdin);break;
             case '[':
                 if(*mem){
-                    char *save_ptr = progc;
+                    char *save_ptr = NULL;
                     do{
-                        progc = save_ptr;
-                        mem = bf_interpret(mem);
+                        mem = bf_interpret(mem, program, &save_ptr);
                     }while(*mem);
+                    program = save_ptr;
                 }else{
                     level = 1;
                     do{
-                        input = *progc++;
+                        input = *program++;
                         if(input == '['){
                             level++;
                         }else if(input == ']'){
@@ -37,11 +35,13 @@ uint8_t *bf_interpret(uint8_t *mem){
                 }
                 break;
             case ']':
+                *offset = program;
                 return mem;
                 break;
 
         }
     }
+    *offset = program;
     return mem;
 }
 
@@ -58,6 +58,7 @@ int main(int argc, char **argv){
                 return 0;
             case 'h':
                 printf("Usage: ./bfi FILE to read from FILE\n");
+                printf("       ./bfi      to read from stdin\n");
                 return 0;
         }
     }
@@ -120,9 +121,9 @@ int main(int argc, char **argv){
         fprintf(stderr, "Memory allocation failure.\n");
         return 1;
     }
-    progc = program;
 
-    bf_interpret(membuf);
+    char *foo;
+    bf_interpret(membuf, program, &foo);
 
     free(membuf);
     free(program);
