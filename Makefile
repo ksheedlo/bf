@@ -13,4 +13,4 @@ bfc: bfc.cc bfc.h lexer.o
 	$(CXX) $(CXXFLAGS) `llvm-config --cppflags --ldflags --libs core native` -o bfc bfc.cc bfc.h 
 
 clean :
-	rm bfi lexer.o lexer.h.gch bfc
+	rm bfi lexer.o lexer.h.gch bfc bfc.h.gch

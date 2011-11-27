@@ -3,25 +3,46 @@
 
 #include "bfi.h"
 
-uint8_t *bf_interpret(uint8_t *mem, char *program, char **offset){
+uint8_t *bf_interpret(uint8_t *mem, bfstate_t *state){
     char input;
     int32_t level;
+    char *program = state->pc;
 
     while((input = *program++) != EOF){
         switch(input){
-            case '>': ++mem;break;
-            case '<': --mem;break;
+            case '>':
+                if(++mem >= (state->base + state->mem_size)){
+                    //Allocate moar memory plz
+                    int32_t new_size = 2*state->mem_size;
+                    uint8_t *new_base = calloc(new_size, sizeof(uint8_t));
+                    if(!new_base){
+                        fprintf(stderr, "%s: %s\n", "Program failed due to errors", "ERR_MEM");
+                        exit(ERR_MEM);
+                    }
+                    memcpy(new_base, state->base, state->mem_size);
+                    free(state->base);
+                    mem = new_base + state->mem_size;
+                    state->base = new_base;
+                    state->mem_size = new_size;
+                }
+                break;
+            case '<': 
+                if(--mem < state->base){
+                    fprintf(stderr, "%s: %s\n", "Program failed due to errors", "ERR_BOUNDS");
+                    exit(ERR_BOUNDS);
+                }
+                break;
             case '+': ++*mem;break;
             case '-': --*mem;break;
             case '.': fputc(*mem, stdout);break;
             case ',': *mem = fgetc(stdin);break;
             case '[':
                 if(*mem){
-                    char *save_ptr = NULL;
                     do{
-                        mem = bf_interpret(mem, program, &save_ptr);
+                        state->pc = program;
+                        mem = bf_interpret(mem, state);
                     }while(*mem);
-                    program = save_ptr;
+                    program = state->pc;
                 }else{
                     level = 1;
                     do{
@@ -35,13 +56,13 @@ uint8_t *bf_interpret(uint8_t *mem, char *program, char **offset){
                 }
                 break;
             case ']':
-                *offset = program;
+                state->pc = program;
                 return mem;
                 break;
 
         }
     }
-    *offset = program;
+    state->pc = program;
     return mem;
 }
 
@@ -50,6 +71,7 @@ int main(int argc, char **argv){
     FILE *input = stdin;
     char *program;
     int32_t st_flags = 0;
+
     while((c = getopt(argc, argv, "Vh")) != -1){
         switch(c){
             case 'V':
@@ -122,11 +144,15 @@ int main(int argc, char **argv){
         return 1;
     }
 
-    char *foo;
-    bf_interpret(membuf, program, &foo);
+    bfstate_t state;
+    state.pc = program;
+    state.base = membuf;
+    state.mem_size = MEM_SIZE;
 
-    free(membuf);
+    bf_interpret(membuf, &state);
+
     free(program);
+    free(state.base);
     return 0;
 }
 

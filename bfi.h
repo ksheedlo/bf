@@ -8,4 +8,14 @@
 #define MAX_PROGBUF 1048576
 #define FILE_INPUT 1
 
-uint8_t *bf_interpret(uint8_t *mem, char *program, char **offset);
+/*Error definitions. */
+#define ERR_BOUNDS 1
+#define ERR_MEM 2
+
+typedef struct {
+    char *pc;
+    uint8_t *base;
+    size_t mem_size;
+} bfstate_t;
+
+uint8_t *bf_interpret(uint8_t *mem, bfstate_t *state);
