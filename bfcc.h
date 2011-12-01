@@ -3,6 +3,7 @@
 
 #include<stdint.h>
 #include<stdio.h>
+#include<stdlib.h>
 
 /* Command constants */
 #define INC 0
@@ -17,7 +18,8 @@
 #define GET 9
 #define LABEL 10
 #define JNZ 11
-#define ZERO 12
+#define JZ 12
+#define ZERO 13
 
 /* Command type constants */
 #define T_PTR 0
@@ -32,11 +34,11 @@ typedef struct _ll_node {
     void *data;
     struct _ll_t *list;
     struct _ll_node *next;
+    struct _ll_node *prev;
 } node_t;
 
 typedef struct _ll_t {
     node_t *head;
-    node_t *tail;
     size_t length;
 } list_t;
 
@@ -47,19 +49,21 @@ typedef struct {
 } bfop_t;
 
 /*Function definitions. */
+void CriticalError(char *str);
+
 void list_init(list_t *list);
 
 void list_addfirst(list_t *list, void *data);
 
 void list_addlast(list_t *list, void *data);
 
-node_t *list_remove(node_t *node);
+void *list_remove(node_t *node);
 
-void list_clear(list_t *list);
+void list_clear(list_t *list, int32_t free_data);
 
 bfop_t *bfop_new(int32_t opcode, int32_t arg);
 
-list_t *bfcc_parse(char *program);
+list_t *bfcc_parse(char *program, list_t *parse_lst);
 
 void bfcc_codegen(FILE *output, list_t *parse_lst);
 
