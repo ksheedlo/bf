@@ -1,0 +1,8 @@
+*.b
+*.bf
+*.bc*
+tests/*.b
+*.o
+bfi
+bfcc
+*.swp

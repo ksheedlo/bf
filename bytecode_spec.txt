@@ -1,0 +1,16 @@
+Ken Sheedlo's brainfuck bytecode spec (.bc)
+
+Command     Description
+inc         increment the data ptr by one
+incv x      increment the data ptr x times
+dec         decrement the data ptr by one
+decv x      decrement the data ptr x times
+add         add one to the byte at the data ptr
+addv x      add x to the byte at the data ptr
+sub         subtract one from the byte at the data ptr
+subv x      subtract x from the byte at the data ptr
+put         print the byte at the data ptr to the screen
+get         accept one byte of input
+LABEL:      Loop label
+jnz LABEL   Jump to LABEL if the byte at the data ptr != 0
+zero        Set the byte at the data ptr to 0
