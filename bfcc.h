@@ -26,6 +26,7 @@
 #define T_ARITH 1
 #define T_IO 2
 #define T_BRANCH 3
+#define T_ZERO 4
 
 /* General data structures. */
 struct _ll_t;   /*Forward declaration*/
@@ -72,6 +73,8 @@ void bfcc_gen32(FILE *output, list_t *parse_lst);
 void bfcc_gen64(FILE *output, list_t *parse_lst);
 
 list_t *bfopt_combine_arith(list_t *parse_lst);
+
+int32_t bfop_type(int32_t opcode);
 
 list_t *bfopt_make_zeros(list_t *parse_lst);
 
