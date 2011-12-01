@@ -71,13 +71,18 @@ int main(int argc, char **argv){
     FILE *input = stdin;
     char *program;
     int32_t st_flags = 0;
+    int32_t verbose = 0;
+    struct timeval t1, t2;
 
-    while((c = getopt(argc, argv, "Vh")) != -1){
+    while((c = getopt(argc, argv, "Vvh")) != -1){
         switch(c){
             case 'V':
                 printf("bfi 1.0 - a tiny brainfuck interpreter\n");
                 printf("Author: Ken Sheedlo\n");
                 return 0;
+            case 'v':
+                verbose = 1;
+                break;
             case 'h':
                 printf("Usage: ./bfi FILE to read from FILE\n");
                 printf("       ./bfi      to read from stdin\n");
@@ -149,7 +154,15 @@ int main(int argc, char **argv){
     state.base = membuf;
     state.mem_size = MEM_SIZE;
 
+    gettimeofday(&t1, NULL);
     bf_interpret(membuf, &state);
+    gettimeofday(&t2, NULL);
+
+    if(verbose){
+        int64_t elapsed = (t2.tv_sec - t1.tv_sec) * 1000000;
+        elapsed += (t2.tv_usec - t1.tv_usec);
+        fprintf(stderr, "Time elapsed: %ld us\n", elapsed);
+    }
 
     free(program);
     free(state.base);
