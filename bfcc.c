@@ -3,123 +3,6 @@
 
 #include "bfcc.h"
 
-void CriticalError(char *str){
-    fprintf(stderr, "%s\n", str);
-    exit(1);
-}
-
-int32_t bfop_type(int32_t opcode){
-    switch(opcode){
-        case INC:
-        case INCV:
-        case DEC:
-        case DECV:
-            return T_PTR;
-        case ADD:
-        case ADDV:
-        case SUB:
-        case SUBV:
-            return T_ARITH;
-        case PUT:
-        case GET:
-            return T_IO;
-        case LABEL:
-        case JNZ:
-        case JZ:
-            return T_BRANCH;
-        case ZERO:
-            return T_ZERO;
-    }
-    return -1; /*Something bad happened */
-}
-
-void list_init(list_t *list){
-    //Initialize the list to empty (one sentinel node).
-    node_t *new_node = malloc(sizeof(node_t));
-    if(new_node == NULL){
-        CriticalError("Failed to allocate memory");
-    }
-    new_node->data = NULL;
-    new_node->next = new_node;
-    new_node->prev = new_node;
-
-    list->head = new_node;
-    list->length = 0;
-}
-
-void list_addfirst(list_t *list, void *data){
-    //Add data to a new node at the head of the list.
-    node_t *new_node = malloc(sizeof(node_t));
-    if(new_node == NULL){
-        CriticalError("Failed to allocate memory");
-    }
-
-    new_node->data = data;
-    new_node->next = list->head->next;
-    new_node->prev = list->head;
-    new_node->list = list;
-
-    new_node->next->prev = new_node;
-    list->head->next = new_node;
-
-    list->length = list->length + 1;
-}
-
-void list_addlast(list_t *list, void *data){
-    //Add data to a new node at the tail of the list.
-    node_t *new_node = malloc(sizeof(node_t));
-    if(new_node == NULL){
-        CriticalError("Failed to allocate memory");
-    }
-
-    new_node->data = data;
-    new_node->list = list;
-    new_node->next = list->head;
-    new_node->prev = list->head->prev;
-
-    new_node->prev->next = new_node;
-    list->head->prev = new_node;
-
-    list->length = list->length + 1;
-}
-
-void *list_remove(node_t *node){
-    /*Remove the specified node from it's list and return a ptr to its data
-     * entry. */
-    void *ret = node->data;
-
-    node->prev->next = node->next;
-    node->next->prev = node->prev;
-    node->list->length = node->list->length - 1;
-
-    free(node);
-    return ret;
-}
-
-void list_clear(list_t *list, int32_t free_data){
-    //Clear the list, freeing data if specified.
-    while(list->head->next != list->head){
-        void *data = list_remove(list->head->next);
-        if(free_data){
-            free(data);
-        }
-    }
-    free(list->head);
-}
-
-bfop_t *bfop_new(int32_t opcode, int32_t arg){
-    //Creates a new bfop_t object on the heap.
-    bfop_t *op = malloc(sizeof(bfop_t));
-    if(op == NULL){
-        CriticalError("Failed to allocate memory");
-    }
-
-    op->opcode = opcode;
-    op->arg = arg;
-
-    return op;
-}
-
 list_t *bfcc_parse(char *program, list_t *parse_lst){
     /*Produces the initial parse list for the program. Does not allocate
      * memory for a new list because it may be used recursively. */
@@ -268,28 +151,29 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
 
         int32_t op1 = curr_op->opcode;
         int32_t op2 = next_op->opcode;
+        bfop_t *r1 = NULL, *r2 = NULL;
         switch(op1){
             case INC:
                 switch(op2){
                     case INC:
                         curr_op->opcode = INCV;
                         curr_op->arg = 2;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case INCV:
                         curr_op->opcode = INCV;
                         curr_op->arg = 1 + next_op->arg;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case DEC:
                         node = node->next->next;
-                        list_remove(node->next);
-                        list_remove(node);
+                        r1 = (bfop_t *)list_remove(node->next);
+                        r2 = (bfop_t *)list_remove(node);
                         break;
                     case DECV:
                         curr_op->opcode = DECV;
                         curr_op->arg = next_op->arg - 1;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                 }
                 break;
@@ -297,23 +181,23 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                 switch(op2){
                      case INC:
                         node = node->next->next;
-                        list_remove(node->next);
-                        list_remove(node);
+                        r1 = (bfop_t *)list_remove(node->next);
+                        r2 = (bfop_t *)list_remove(node);
                         break;
                     case INCV:
                         curr_op->opcode = INCV;
                         curr_op->arg = next_op->arg - 1;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case DEC:
                         curr_op->opcode = DECV;
                         curr_op->arg = 2;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case DECV:
                         curr_op->opcode = DECV;
                         curr_op->arg = next_op->arg + 1;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                 }
                 break;
@@ -332,7 +216,7 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                         curr_op->arg = curr_op->arg - next_op->arg;
                         break;
                 }
-                list_remove(node->next);
+                r1 = (bfop_t *)list_remove(node->next);
                 break;
             case DECV:
                 switch(op2){
@@ -349,29 +233,29 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                         curr_op->arg = curr_op->arg + next_op->arg;
                         break;
                 }
-                list_remove(node->next);
+                r1 = (bfop_t *)list_remove(node->next);
                 break;
             case ADD:
                 switch(op2){
                     case ADD:
                         curr_op->opcode = ADDV;
                         curr_op->arg = 2;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case ADDV:
                         curr_op->opcode = ADDV;
                         curr_op->arg = 1 + next_op->arg;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case SUB:
                         node = node->next->next;
-                        list_remove(node->next);
-                        list_remove(node);
+                        r1 = (bfop_t *)list_remove(node->next);
+                        r2 = (bfop_t *)list_remove(node);
                         break;
                     case SUBV:
                         curr_op->opcode = SUBV;
                         curr_op->arg = next_op->arg - 1;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                 }
                 break;
@@ -391,29 +275,29 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                         break;
 
                 }
-                list_remove(node->next);
+                r1 = (bfop_t *)list_remove(node->next);
                 break;
             case SUB:
                 switch(op2){
                     case ADD:
                         node = node->next->next;
-                        list_remove(node->next);
-                        list_remove(node);
+                        r1 = (bfop_t *)list_remove(node->next);
+                        r2 = (bfop_t *)list_remove(node);
                         break;
                     case ADDV:
                         curr_op->opcode = ADDV;
                         curr_op->arg = next_op->arg - 1;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case SUB:
                         curr_op->opcode = SUBV;
                         curr_op->arg = 2;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                     case SUBV:
                         curr_op->opcode = SUBV;
                         curr_op->arg = 1 + next_op->arg;
-                        list_remove(node->next);
+                        r1 = (bfop_t *)list_remove(node->next);
                         break;
                 }
                 break;
@@ -432,8 +316,15 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                         curr_op->arg = next_op->arg + curr_op->arg;
                         break;
                 }
-                list_remove(node->next);
+                r1 = (bfop_t *)list_remove(node->next);
                 break;
+        }
+        /* In case there are bfop_t's that we removed, free them */
+        if(r1 != NULL){
+            free(r1);
+        }
+        if(r2 != NULL){
+            free(r2);
         }
     }
 
@@ -448,7 +339,7 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                     curr_op->arg = -(curr_op->arg);
                 }else if(curr_op->arg == 0){
                     node = node->next;
-                    list_remove(node);
+                    free(list_remove(node));
                     break;
                 }else if(curr_op->arg == 1){
                     curr_op->opcode = ADD;
@@ -461,7 +352,7 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                     curr_op->arg = -(curr_op->arg);
                 }else if(curr_op->arg == 0){
                     node = node->next;
-                    list_remove(node);
+                    free(list_remove(node));
                     break;
                 }else if(curr_op->arg == 1){
                     curr_op->opcode = SUB;
@@ -474,7 +365,7 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                     curr_op->arg = -(curr_op->arg);
                 }else if(curr_op->arg == 0){
                     node = node->next;
-                    list_remove(node);
+                    free(list_remove(node));
                     break;
                 }else if(curr_op->arg == 1){
                     curr_op->opcode = INC;
@@ -487,7 +378,7 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
                     curr_op->arg = -(curr_op->arg);
                 }else if(curr_op->arg == 0){
                     node = node->next;
-                    list_remove(node);
+                    free(list_remove(node));
                     break;
                 }else if(curr_op->arg == 1){
                     curr_op->opcode = DEC;
@@ -551,15 +442,15 @@ list_t *bfopt_make_zeros(list_t *parse_lst){
             node = node->next;
             continue;
         }
-        
-        /* If we get here we know for sure this is a [-] */
+
+        /* If we get here we know for sure this is a [-] */ 
         curr_op->opcode = ZERO;
         curr_op->arg = 0;
 
-        list_remove(node->next);
-        list_remove(node->next);
-        list_remove(node->next);
-        list_remove(node->next);
+        free(list_remove(node->next));
+        free(list_remove(node->next));
+        free(list_remove(node->next));
+        free(list_remove(node->next));
 
         node_t *head = parse_lst->head;
         node = node->next;
