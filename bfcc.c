@@ -395,79 +395,159 @@ list_t *bfopt_combine_arith(list_t *parse_lst){
     return parse_lst;
 }
 
-list_t *bfopt_make_zeros(list_t *parse_lst){
-    /*Searches the parse list for the following series: "[-]" and replaces with
-     * *ptr = 0. */
-    if(parse_lst->length < 5){
-        return parse_lst;
+int32_t bfop_structural_eq(const void *op1, const void *op2){
+    bfop_t *lhs = (bfop_t *)op1;
+    bfop_t *rhs = (bfop_t *)op2;
+
+    if(lhs->opcode == rhs->opcode && lhs->arg == rhs->arg){
+        return 1;
     }
 
-    node_t *node = parse_lst->head->next;
-    while(node->next->next->next->next != parse_lst->head){
-        bfop_t *curr_op = (bfop_t *)node->data;
-        bfop_t *test_op = curr_op;
-        int32_t top_label, bot_label;
-
-        if(test_op->opcode != JZ){
-            node = node->next;
-            continue;
-        }else{
-            bot_label = test_op->arg;
-            test_op = (bfop_t *)node->next->data;
-        }
-
-        if(test_op->opcode != LABEL){
-            node = node->next;
-            continue;
-        }else{
-            top_label = test_op->arg;
-            test_op = (bfop_t *)node->next->next->data;
-        }
-
-        if(test_op->opcode != SUB){
-            node = node->next;
-            continue;
-        }else{
-            test_op = (bfop_t *)node->next->next->next->data;
-        }
-
-        if(test_op->opcode != JNZ || test_op->arg != top_label){
-            node = node->next;
-            continue;
-        }else{
-            test_op = (bfop_t *)node->next->next->next->next->data;
-        }
-
-        if(test_op->opcode != LABEL || test_op->arg != bot_label){
-            node = node->next;
-            continue;
-        }
-
-        /* If we get here we know for sure this is a [-] */ 
-        curr_op->opcode = ZERO;
-        curr_op->arg = 0;
-
-        free(list_remove(node->next));
-        free(list_remove(node->next));
-        free(list_remove(node->next));
-        free(list_remove(node->next));
-
-        node_t *head = parse_lst->head;
-        node = node->next;
-        node_t *test = node;
-        int32_t st = 0;
-
-        for(int i = 0; i<4; i++){
-            if(test == head){
-                st = 1;
-                break;
-            }
-            test = test->next;
-        }
-        if(st)
+    switch(lhs->opcode){
+        case JZ:
+        case JNZ:
+        case LABEL:
+        case ZERO:
+        case PUT:
+        case GET:
+            return lhs->opcode == rhs->opcode;
+        case ADD:
+            return rhs->opcode == ADD || (rhs->opcode == ADDV && rhs->arg == 1)
+                    || (rhs->opcode == SUBV && rhs->arg == -1);
+        case SUB:
+            return rhs->opcode == SUB || (rhs->opcode == SUBV && rhs->arg == 1)
+                || (rhs->opcode == ADDV && rhs->arg == -1);
+        case INC:
+            return rhs->opcode == INC || (rhs->opcode == INCV && rhs->arg == 1)
+                || (rhs->opcode == DECV && rhs->arg == -1);
+        case DEC:
+            return rhs->opcode == DEC || (rhs->opcode == DECV && rhs->arg == 1)
+                || (rhs->opcode == INCV && rhs->arg == -1);
+        case ADDV:
+            if(rhs->opcode == ADD)
+                return lhs->arg == 1;
+            if(rhs->opcode == SUB)
+                return lhs->arg == -1;
+            if(rhs->opcode == SUBV)
+                return lhs->arg == -(rhs->arg);
             break;
+        case SUBV:
+            if(rhs->opcode == SUB)
+                return lhs->arg == 1;
+            if(rhs->opcode == ADD)
+                return lhs->arg == -1;
+            if(rhs->opcode == ADDV)
+                return lhs->arg == -(rhs->arg);
+            break;
+        case INCV:
+            if(rhs->opcode == INC)
+                return lhs->arg == 1;
+            if(rhs->opcode == DEC)
+                return lhs->arg == -1;
+            if(rhs->opcode == DECV)
+                return lhs->arg == -(rhs->arg);
+            break;
+        case DECV:
+            if(rhs->opcode == DEC)
+                return lhs->arg == 1;
+            if(rhs->opcode == INC)
+                return lhs->arg == -1;
+            if(rhs->opcode == INCV)
+                return lhs->arg == -(rhs->arg);
+            break;
+
+    }
+    return 0;
+}
+
+list_t *bfopt_apply_filter(list_t *parse_lst, list_t *pattern, list_t *replace){
+    
+    /* Applies the filter described in pattern to the parse list. */
+    int32_t label = -1, replace_labels = 0;
+    node_t *node = parse_lst->head->next;
+    while(node != parse_lst->head){
+        /*Find the highest loop label so as to avoid labelling conflicts */
+        bfop_t *op = (bfop_t *)node->data;
+        if(op->opcode == LABEL && op->arg > label){
+            label = op->arg;
+        }
+        node = node->next;
+    }
+    label++;
+
+    /*Determine how many labels there are in the replace list. */
+    node = replace->head->next;
+    while(node != replace->head){
+        bfop_t *op = (bfop_t *)node->data;
+        if(op->opcode == LABEL)
+            replace_labels++;
+
+        node = node->next;
     }
 
+    node = parse_lst->head->next;
+    node_t *leader = node;
+    for(int i = 1; i < pattern->length; i++){
+        leader = leader->next;
+        if(leader == parse_lst->head){
+            break;
+        }
+    }
+    while(leader != parse_lst->head){
+        int32_t match = list_match(parse_lst, node, pattern, pattern->head->next,
+                            bfop_structural_eq, pattern->length);
+
+        if(match){
+            node_t *last = node->prev;
+            for(int j = 0; j < pattern->length; j++){
+                free(list_remove(last->next));
+            }
+            last = last->next;
+            node_t *foo = replace->head->next;
+            while(foo != replace->head){
+                bfop_t *fop = (bfop_t *)foo->data;
+                int32_t farg = fop->arg;
+                if(bfop_type(fop->opcode) == T_BRANCH){
+                    farg += label;
+                }
+
+                list_insertbefore(last, bfop_new(fop->opcode, farg));
+                foo = foo->next;
+            }
+            label += replace_labels;
+            node = last;
+            leader = node;
+            for(int i = 1; i < pattern->length; i++){
+                leader = leader->next;
+                if(leader == parse_lst->head){
+                    break;
+                }
+            }
+        }else{
+            node = node->next;
+            leader = leader->next;
+        }
+    }
+    return parse_lst;
+}
+
+list_t *bfopt_make_zeros(list_t *parse_lst){
+    list_t pattern, replace;
+    list_init(&pattern);
+    list_init(&replace);
+
+    list_addlast(&pattern, bfop_new(JZ, 0));
+    list_addlast(&pattern, bfop_new(LABEL, 1));
+    list_addlast(&pattern, bfop_new(SUB, 0));
+    list_addlast(&pattern, bfop_new(JNZ, 1));
+    list_addlast(&pattern, bfop_new(LABEL, 0));
+
+    list_addfirst(&replace, bfop_new(ZERO, 0));
+
+    bfopt_apply_filter(parse_lst, &pattern, &replace);
+
+    list_clear(&pattern, 1);
+    list_clear(&replace, 1);
     return parse_lst;
 }
 

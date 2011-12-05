@@ -23,6 +23,10 @@ void list_addfirst(list_t *list, void *data);
 
 void list_addlast(list_t *list, void *data);
 
+void list_insertbefore(node_t *node, void *data);
+
+void list_insertafter(node_t *node, void *data);
+
 void *list_remove(node_t *node);
 
 void list_clear(list_t *list, int32_t free_data);

@@ -53,6 +53,39 @@ void list_addlast(list_t *list, void *data){
     list->length = list->length + 1;
 }
 
+void list_insertbefore(node_t *node, void *data){
+    //Insert data into a new node before the specified node.
+    node_t *new_node = malloc(sizeof(node_t));
+    if(new_node == NULL){
+        CriticalError("Failed to allocate memory");
+    }
+
+    new_node->data = data;
+    new_node->list = node->list;
+    new_node->next = node;
+    new_node->prev = node->prev;
+    node->prev = new_node;
+    new_node->prev->next = new_node;
+
+    node->list->length = node->list->length + 1;
+}
+
+void list_insertafter(node_t *node, void *data){
+    node_t *new_node = malloc(sizeof(node_t));
+    if(new_node == NULL){
+        CriticalError("Failed to allocate memory");
+    }
+
+    new_node->data = data;
+    new_node->list = node->list;
+    new_node->prev = node;
+    new_node->next = node->next;
+    node->next = new_node;
+    new_node->next->prev = new_node;
+
+    node->list->length = node->list->length + 1;
+}
+
 void *list_remove(node_t *node){
     /*Remove the specified node from it's list and return a ptr to its data
      * entry. */

@@ -105,13 +105,66 @@ int32_t test_list_addlast(){
 }
 
 int32_t test_list_remove(){
-    
-    return 1;
+    list_t list;
+    list_init(&list);
+
+    list_addlast(&list, bfop_new(SUB, 0));
+    list_addlast(&list, bfop_new(INCV, 42));
+    list_addlast(&list, bfop_new(JZ, 0x20));
+    list_addlast(&list, bfop_new(LABEL, 0xF00));
+    list_addlast(&list, bfop_new(ADDV, 2));
+
+    int32_t ox[] = {SUB, INCV, JZ, LABEL, ADDV};
+    int32_t ax[] = {0, 42, 0x20, 0xF00, 2};
+
+    int32_t st = assert_bfop_lstcontents(&list, ox, ax, 5);
+
+    if(!st){
+        list_clear(&list, 1);
+        return 0;
+    }
+
+    free(list_remove(list.head->next->next));
+    free(list_remove(list.head->prev));
+
+    int32_t ox2[] = {SUB, JZ, LABEL};
+    int32_t ax2[] = {0, 0x20, 0xF00};
+
+    st = assert_bfop_lstcontents(&list, ox2, ax2, 3);
+    list_clear(&list, 1);
+    return st;
 }
 
 int32_t test_list_match(){
+    /*Pass in a match and a non-match to make sure match works properly*/
+    list_t lst1, lst2;
+    list_init(&lst1);
+    list_init(&lst2);
+
+    list_addlast(&lst1, bfop_new(SUB, 0));
+    list_addlast(&lst1, bfop_new(INCV, 42));
+    list_addlast(&lst1, bfop_new(JZ, 0x20));
+    list_addlast(&lst1, bfop_new(LABEL, 0xF00));
+    list_addlast(&lst1, bfop_new(ADDV, 2));
     
-    return 1;
+    list_addlast(&lst2, bfop_new(INCV, 42));
+    list_addlast(&lst2, bfop_new(JZ, 0x20));
+    list_addlast(&lst2, bfop_new(LABEL, 0xF00));
+
+    int32_t st = list_match(&lst1, lst1.head->next->next, &lst2, lst2.head->next, 
+                            bfop_equal, 3);
+
+    if(!st){
+        list_clear(&lst1, 1);
+        list_clear(&lst2, 1);
+        return 0;
+    }
+
+    st = list_match(&lst1, lst1.head->next, &lst2, lst2.head->next, bfop_equal, 3);
+    list_clear(&lst1, 1);
+    list_clear(&lst2, 1);
+
+    return !st;
 }
 
 int main(int argc, char **argv){

@@ -22,3 +22,8 @@ list_t *bfopt_combine_arith(list_t *parse_lst);
 
 list_t *bfopt_make_zeros(list_t *parse_lst);
 
+list_t *bfopt_apply_filter(list_t *parse_lst, list_t *pattern, list_t *replace);
+
+/*Compares op1, op2 for structural equality.*/
+int32_t bfop_structural_eq(const void *op1, const void *op2);
+
