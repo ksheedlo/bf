@@ -34,3 +34,5 @@ void list_clear(list_t *list, int32_t free_data);
 int32_t list_match(list_t *lst0, node_t *s0, list_t *lst1, node_t *s1, 
     int32_t (*eq)(const void *, const void *), int32_t count);
 
+void list_print(FILE *output, list_t *lst, void (*disp)(FILE *, const void *));
+

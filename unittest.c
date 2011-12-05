@@ -27,23 +27,6 @@ int32_t list_equal(list_t *lhs, list_t *rhs, int32_t (*eq)(const void *, const v
     return 1;
 }
 
-void generic_bfop_print(FILE *output, const void *op){
-    bfop_print(output, (const bfop_t *)op);
-}
-
-void list_print(FILE *output, list_t *lst, void (*disp)(FILE *, const void *)){
-    fprintf(output, "[");
-node_t *foo = lst->head->next; while(foo != lst->head){
-        disp(output, foo->data);
-        if(foo->next != lst->head){
-            fprintf(output, ", ");
-        }
-        foo = foo->next;
-    }
-
-    fprintf(output, "]\n");
-}
-
 int32_t assert_bfop_lstcontents(list_t *lst, int32_t *ops, int32_t *args, int32_t len){
     if(lst->length != len){
         fprintf(stderr, "Wrong list length, expected %d, actual is %d\n", 

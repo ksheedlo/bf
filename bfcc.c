@@ -551,6 +551,91 @@ list_t *bfopt_make_zeros(list_t *parse_lst){
     return parse_lst;
 }
 
+void load_filter(FILE *input, list_t *pattern, list_t *replace){
+    char buf[24];
+    char *commands[] = {
+        "inc",
+        "incv", 
+        "dec", 
+        "decv", 
+        "add",
+        "addv",
+        "sub",
+        "subv",
+        "put",
+        "get",
+        "jnz",
+        "jz",
+        "zero"
+    };
+    int32_t opcodes[] = {INC, INCV, DEC, DECV, ADD, ADDV, SUB, SUBV, PUT, GET,
+                            JNZ, JZ, ZERO};
+    int32_t length = sizeof(opcodes) / sizeof(opcodes[0]);
+    int32_t cmd, arg;
+
+    /* Burn the first input line; should be "pattern" */
+    fscanf(input, "%s", buf);
+    
+    while(fscanf(input, "%s", buf) != EOF){
+        if(!strcmp(buf, "replace")){
+            break;
+        }
+        printf("%s\n", buf);
+        cmd = LABEL;
+        for(int i = 0; i < length; i++){
+            if(!strcmp(buf, commands[i])){
+                cmd = opcodes[i];
+                arg = 0;
+                break;
+            }
+        }
+        switch(cmd){
+            case INCV:
+            case DECV:
+            case ADDV:
+            case SUBV:
+                fscanf(input, "%d", &arg);
+                break;
+            case JNZ:
+            case JZ:
+                fscanf(input, " L%d", &arg);
+                break;
+            case LABEL:
+                sscanf(buf, "L%d:", &arg);
+                break;
+        }
+
+        list_addlast(pattern, bfop_new(cmd, arg));
+    }
+    while(fscanf(input, "%s", buf) != EOF){
+        cmd = LABEL;
+        for(int i = 0; i< length; i++){
+            if(!strcmp(buf, commands[i])){
+                cmd = opcodes[i];
+                arg = 0;
+                break;
+            }
+        }
+        switch(cmd){
+            case INCV:
+            case DECV:
+            case ADDV:
+            case SUBV:
+                fscanf(input, " %d", &arg);
+                break;
+            case JNZ:
+            case JZ:
+                fscanf(input, " L%d", &arg);
+                break;
+            case LABEL:
+                sscanf(buf, "L%d:", &arg);
+                break;
+           
+        }
+        list_addlast(replace, bfop_new(cmd, arg));
+    }
+}
+
 int main(int argc, char **argv){
     if(argc < 2){
         CriticalError("Must provide a .b source file to compile");
@@ -580,6 +665,19 @@ int main(int argc, char **argv){
     bfcc_parse(program, &list);
     bfopt_combine_arith(&list);
     bfopt_make_zeros(&list);
+
+    FILE *zfilter = fopen("filters/zero.flt", "r");
+    list_t pattern, replace;
+    list_init(&pattern);
+    list_init(&replace);
+    load_filter(zfilter, &pattern, &replace);
+    printf("Pattern:\n");
+    list_print(stdout, &pattern, generic_bfop_print);
+    printf("\nReplace:\n");
+    list_print(stdout, &replace, generic_bfop_print);
+
+    list_clear(&pattern, 1);
+    list_clear(&replace, 1);
     
     FILE *output = fopen("a.bc", "w");
     if(!output){

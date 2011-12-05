@@ -127,4 +127,18 @@ int32_t list_match(list_t *lst0, node_t *s0, list_t *lst1, node_t *s1,
     return 1;
 }
 
+void list_print(FILE *output, list_t *lst, void (*disp)(FILE *, const void *)){
+    fprintf(output, "[");
+    node_t *foo = lst->head->next; 
+    while(foo != lst->head){
+        disp(output, foo->data);
+        if(foo->next != lst->head){
+            fprintf(output, ", ");
+        }
+        foo = foo->next;
+    }
+
+    fprintf(output, "]\n");
+}
+
 

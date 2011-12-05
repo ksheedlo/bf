@@ -63,3 +63,8 @@ void bfop_print(FILE *output, const bfop_t *op){
     }
     fprintf(output, "{ opcode: %s, arg: %d }", code, op->arg);
 }
+
+void generic_bfop_print(FILE *output, const void *op){
+    bfop_print(output, (const bfop_t *)op);
+}
+

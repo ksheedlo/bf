@@ -41,3 +41,5 @@ int32_t bfop_type(int32_t opcode);
 
 void bfop_print(FILE *output, const bfop_t *op);
 
+void generic_bfop_print(FILE *output, const void *op);
+

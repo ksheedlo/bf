@@ -4,6 +4,7 @@
 #include<stdint.h>
 #include<stdio.h>
 #include<stdlib.h>
+#include<string.h>
 
 #include "error_handling.h"
 #include "list.h"
@@ -26,4 +27,6 @@ list_t *bfopt_apply_filter(list_t *parse_lst, list_t *pattern, list_t *replace);
 
 /*Compares op1, op2 for structural equality.*/
 int32_t bfop_structural_eq(const void *op1, const void *op2);
+
+void load_filter(FILE *input, list_t *pattern, list_t *replace);
 
