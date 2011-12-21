@@ -194,6 +194,7 @@ void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename){
                 fprintf(output, "\t movl\tstdin, %%eax\n");
                 fprintf(output, "\t movl\t%%eax, (%%esp)\n");
                 fprintf(output, "\t call\tfgetc\n");
+                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
                 break;
         }
         node = node->next;
