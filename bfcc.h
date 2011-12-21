@@ -15,9 +15,9 @@ list_t *bfcc_parse(char *program, list_t *parse_lst);
 
 void bfcc_codegen(FILE *output, list_t *parse_lst);
 
-void bfcc_gen32(FILE *output, list_t *parse_lst);
+void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename);
 
-void bfcc_gen64(FILE *output, list_t *parse_lst);
+void bfcc_gen64(FILE *output, list_t *parse_lst, char *filename);
 
 list_t *bfopt_combine_arith(list_t *parse_lst);
 

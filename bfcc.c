@@ -115,12 +115,121 @@ void bfcc_codegen(FILE *output, list_t *parse_lst){
     }
 }
 
-void bfcc_gen32(FILE *output, list_t *parse_lst){
-    //XXX
+void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename){
+    //Generate 32-bit x86 code.
+    fprintf(output, "\t .file\t\"%s\"\n", filename);
+    fprintf(output, "\t .text\n.globl bf_prog\n\t .type\t bf_prog, @function\n");
+    fprintf(output, "bf_prog:\n");
+    fprintf(output, "\t pushl\t%%ebp\n");
+    fprintf(output, "\t movl\t%%esp, %%ebp\n");
+    fprintf(output, "\t pushl\t%%ebx\n");
+    fprintf(output, "\t movl\t8(%%ebp), %%ebx\n");
+    fprintf(output, "\t subl\t$8, %%esp\n");
+    fprintf(output, "\t movl\tstdout, %%eax\n");
+    fprintf(output, "\t movl\t%%eax, 4(%%esp)\n");
+#if 0
+    fprintf(output, "\t pushl\t%%esi\n");
+    fprintf(output, "\t pushl\t%%edi\n");
+#endif
+    node_t *node = parse_lst->head->next;
 
+    while(node != parse_lst->head){
+        bfop_t *op = node->data;
+        switch(op->opcode){
+            case INC:
+                fprintf(output, "\t inc\t%%ebx\n");
+                break;
+            case INCV:
+                fprintf(output, "\t addl\t$%d, %%ebx\n", op->arg);
+                break;
+            case DEC:
+                fprintf(output, "\t dec\t%%ebx\n");
+                break;
+            case DECV:
+                fprintf(output, "\t subl\t$%d, %%ebx\n", op->arg);
+                break;
+            case ADD:
+                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t inc\t%%eax\n");
+                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                break;
+            case ADDV:
+                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t addl\t$%d, %%eax\n", op->arg);
+                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                break;
+            case SUB:
+                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t dec\t%%eax\n");
+                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                break;
+            case SUBV:
+                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t subl\t$%d, %%eax\n", op->arg);
+                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                break;
+            case ZERO:
+                fprintf(output, "\t movb\t$0, (%%ebx)\n");
+                break;
+            case LABEL:
+                fprintf(output, ".L%d:\n", op->arg);
+                break;
+            case JNZ:
+                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t test\t%%eax, %%eax\n");
+                fprintf(output, "\t jnz\t.L%d\n", op->arg);
+                break;
+            case JZ:
+                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t test\t%%eax, %%eax\n");
+                fprintf(output, "\t jz\t.L%d\n", op->arg);
+                break;
+            case PUT:
+                fprintf(output, "\t movl\t(%%ebx), %%eax\n");
+                fprintf(output, "\t movzbl\t%%al, %%eax\n");
+                fprintf(output, "\t movl\t%%eax, (%%esp)\n");
+                fprintf(output, "\t call\tfputc\n");
+                break;
+            case GET:
+                fprintf(output, "\t movl\tstdin, %%eax\n");
+                fprintf(output, "\t movl\t%%eax, (%%esp)\n");
+                fprintf(output, "\t call\tfgetc\n");
+                break;
+        }
+        node = node->next;
+    }
+
+    /* Finish up the bf program function and fill in main */
+#if 0
+    fprintf(output, "\t popl\t%%edi\n");
+    fprintf(output, "\t popl\t%%esi\n");
+#endif
+    fprintf(output, "\t addl\t$8, %%esp\n");
+    fprintf(output, "\t popl\t%%ebx\n");
+    fprintf(output, "\t popl\t%%ebp\n");
+    fprintf(output, "\t ret\n\t .size\tbf_prog, .-bf_prog\n");
+    fprintf(output, ".globl main\n\t .type\tmain, @function\nmain:\n");
+    fprintf(output, "\t pushl\t%%ebp\n");
+    fprintf(output, "\t movl\t%%esp, %%ebp\n");
+    fprintf(output, "\t andl\t$-16, %%esp\n");
+    fprintf(output, "\t subl\t$32, %%esp\n");
+    fprintf(output, "\t movl\t$1, 4(%%esp)\n");
+    fprintf(output, "\t movl\t$30000, (%%esp)\n");
+    fprintf(output, "\t call\tcalloc\n");
+    fprintf(output, "\t movl\t%%eax, 28(%%esp)\n");
+    fprintf(output, "\t movl\t28(%%esp), %%eax\n");
+    fprintf(output, "\t movl\t%%eax, (%%esp)\n");
+    fprintf(output, "\t call\tbf_prog\n");
+    fprintf(output, "\t movl\t$0, %%eax\n");
+    fprintf(output, "\t leave\n");
+    fprintf(output, "\t ret\n");
+    fprintf(output, "\t .size\tmain, .-main\n");
+    fprintf(output, "\t .ident\t\"bfcc 1.0.0\"\n");
+    fprintf(output, "\t .section\t.note.GNU-stack,\"\",@progbits\n");
+    
 }
 
-void bfcc_gen64(FILE *output, list_t *parse_lst){
+void bfcc_gen64(FILE *output, list_t *parse_lst, char *filename){
     //XXX
 
 }
@@ -657,6 +766,7 @@ int main(int argc, char **argv){
         "filters/zero.flt"
     };
     size_t filter_length = sizeof(filters) / sizeof(filters[0]);
+    char buf[16];
 
     if(argc < 2){
         CriticalError("Must provide a .b source file to compile");
@@ -666,6 +776,16 @@ int main(int argc, char **argv){
     if(!input){
         CriticalError("Could not open file");
     }
+    strncpy(buf, argv[1], 16);
+    buf[15] = '\0';
+    int i;
+    for(i = 0; i < 13; i++){
+        if(buf[i] == '.')
+            break;
+    }
+    buf[i] = '.';
+    buf[i+1] = 's';
+    buf[i+2] = '\0';
 
     fseek(input, 0L, SEEK_END);
     int32_t f_len = ftell(input) + 1;
@@ -690,12 +810,12 @@ int main(int argc, char **argv){
         apply_filter_file(filters[i], &list);
     }
 
-    FILE *output = fopen("a.bc", "w");
+    FILE *output = fopen(buf, "w");
     if(!output){
         CriticalError("Could not open file");
     }
 
-    bfcc_codegen(output, &list);
+    bfcc_gen32(output, &list, buf);
     fclose(output);
     list_clear(&list, 1);
 
