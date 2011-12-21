@@ -13,9 +13,11 @@ bfop.o: bfop.c bfop.h error_handling.o
 
 error_handling.o: error_handling.c error_handling.h
 
+tuple.o: tuple.h tuple.c
+
 list.o: list.c list.h error_handling.o
 
-unittest: unittest.c unittest.h list.o bfop.o error_handling.o
+unittest: unittest.c unittest.h list.o tuple.o bfop.o error_handling.o
 
 clean :
 	rm bfi bfcc *.o *.h.gch 

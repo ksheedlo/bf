@@ -580,7 +580,6 @@ void load_filter(FILE *input, list_t *pattern, list_t *replace){
         if(!strcmp(buf, "replace")){
             break;
         }
-        printf("%s\n", buf);
         cmd = LABEL;
         for(int i = 0; i < length; i++){
             if(!strcmp(buf, commands[i])){
@@ -636,7 +635,29 @@ void load_filter(FILE *input, list_t *pattern, list_t *replace){
     }
 }
 
+void apply_filter_file(char *filename, list_t *parse_lst){
+    FILE *input = fopen(filename, "r");
+    if(!input){
+        CriticalError("Could not open file");
+    }
+
+    list_t pattern, replace;
+    list_init(&pattern);
+    list_init(&replace);
+
+    load_filter(input, &pattern, &replace);
+    bfopt_apply_filter(parse_lst, &pattern, &replace);
+
+    list_clear(&replace, 1);
+    list_clear(&pattern, 1);
+}
+
 int main(int argc, char **argv){
+    char *filters[] = {
+        "filters/zero.flt"
+    };
+    size_t filter_length = sizeof(filters) / sizeof(filters[0]);
+
     if(argc < 2){
         CriticalError("Must provide a .b source file to compile");
     }
@@ -664,21 +685,11 @@ int main(int argc, char **argv){
 
     bfcc_parse(program, &list);
     bfopt_combine_arith(&list);
-    bfopt_make_zeros(&list);
 
-    FILE *zfilter = fopen("filters/zero.flt", "r");
-    list_t pattern, replace;
-    list_init(&pattern);
-    list_init(&replace);
-    load_filter(zfilter, &pattern, &replace);
-    printf("Pattern:\n");
-    list_print(stdout, &pattern, generic_bfop_print);
-    printf("\nReplace:\n");
-    list_print(stdout, &replace, generic_bfop_print);
+    for(int i = 0; i<filter_length; i++){
+        apply_filter_file(filters[i], &list);
+    }
 
-    list_clear(&pattern, 1);
-    list_clear(&replace, 1);
-    
     FILE *output = fopen("a.bc", "w");
     if(!output){
         CriticalError("Could not open file");

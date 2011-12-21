@@ -141,4 +141,33 @@ void list_print(FILE *output, list_t *lst, void (*disp)(FILE *, const void *)){
     fprintf(output, "]\n");
 }
 
+void list_map(list_t *rop, list_t *op, void *(*map)(const void *)){
+    /* Performs a map operation on op, storing results in rop.
+     *
+     */
+    node_t *node = op->head->next;
+    while(node != op->head){
+        void *map_data = map(node->data);
+        list_addlast(rop, map_data);
+
+        node = node->next;
+    }
+}
+
+void list_filter(list_t *rop, list_t *op, int32_t (*filt)(const void *)){
+    /* Performs a filter operation on op, storing results in rop.
+     *
+     * Note that if a given data object passes the filter, only the pointer will
+     * be copied into the new list. This means that callers SHOULD NOT FREE the
+     * filtered list's data if they wish to continue using the unfiltered source
+     * and vice versa. */
+    node_t *node = op->head->next;
+    while(node != op->head){
+        if(filt(node->data)){
+            list_addlast(rop, node->data);
+        }
+
+        node = node->next;
+    }
+}
 

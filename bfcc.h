@@ -30,3 +30,5 @@ int32_t bfop_structural_eq(const void *op1, const void *op2);
 
 void load_filter(FILE *input, list_t *pattern, list_t *replace);
 
+void apply_filter_file(char *filename, list_t *parse_lst);
+

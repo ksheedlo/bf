@@ -1,6 +1,7 @@
 /*Ken Sheedlo's brainfuck compiler
  * Unit test program. */
 
+#include<assert.h>
 #include<stdio.h>
 #include<stdlib.h>
 #include<stdint.h>

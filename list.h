@@ -36,3 +36,9 @@ int32_t list_match(list_t *lst0, node_t *s0, list_t *lst1, node_t *s1,
 
 void list_print(FILE *output, list_t *lst, void (*disp)(FILE *, const void *));
 
+void list_map(list_t *rop, list_t *op, void *(*map)(const void *));
+
+void list_filter(list_t *rop, list_t *op, int32_t (*filt)(const void *));
+
+void list_zip(list_t *rop, list_t *op1, list_t *op2);
+
