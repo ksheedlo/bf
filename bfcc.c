@@ -62,7 +62,7 @@ list_t *bfcc_parse(char *program, list_t *parse_lst){
     return parse_lst;
 }
 
-void bfcc_codegen(FILE *output, list_t *parse_lst){
+void bfcc_codegen(FILE *output, list_t *parse_lst, char *filename){
     //Generate portable brainfuck bytecode to output.
     node_t *node = parse_lst->head->next;
     while(node != parse_lst->head){
@@ -762,31 +762,123 @@ void apply_filter_file(char *filename, list_t *parse_lst){
     list_clear(&pattern, 1);
 }
 
+void exec_and_block(const char *filename, const char *argv[], const char *envp[]){
+    int i = 0;
+    const char *arg;
+    while((arg = argv[i++]) != NULL){
+        fprintf(stderr, "%s ", arg);
+    }
+    fprintf(stderr, "\n");
+
+    /* Block SIGCHLD */
+
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGCHLD);
+    sigprocmask(SIG_BLOCK, &set, NULL);
+
+    pid_t pid = fork();
+    if(pid == -1){
+        fprintf(stderr, "fork failed\n");
+    }
+    if(pid == 0){
+        /* We're the child process, so go ahead and execve */
+        setpgid(0, 0);
+        sigprocmask(SIG_UNBLOCK, &set, NULL); /* Unblock SIGCHLD */
+        execve(filename, (char * const*)argv, (char * const *)envp);
+
+        /*Control should never reach this line. If we did, you dun goofed */
+        fprintf(stderr, "Unknown command: %s\n", filename);
+        exit(1);
+    }else{
+        int status = 0;
+        sigprocmask(SIG_UNBLOCK, &set, NULL);
+        do{
+            waitpid(pid, &status, 0);
+        }while(!(WIFEXITED(status) || WIFSIGNALED(status)));
+    }
+}
+
 int main(int argc, char **argv){
     char *filters[] = {
         "filters/zero.flt"
     };
     size_t filter_length = sizeof(filters) / sizeof(filters[0]);
-    char buf[16];
+    char *output_fname, *output_fdup;
+    int32_t verbose = 0;
+    int32_t opt_level;
+    int32_t output_mode = -1;
+    void (*codegen)(FILE *, list_t *, char *);
 
-    if(argc < 2){
+    /* If we compiled the compiler 64-bit, we probably want to compile brainfuck
+     * to 64-bit also, and likewise for 32-bit */
+#ifdef __LP64__
+    codegen = bfcc_gen64;
+#else
+    codegen = bfcc_gen32;
+#endif
+#if 1
+    /* XXX Get rid of this when bfcc_gen64 is finished */
+    codegen = bfcc_gen32;
+#endif
+
+    struct option long_options[] = {
+        {"verbose", no_argument, NULL, 'v'},
+        {"m32", no_argument, NULL, 'l'},
+        {"m64", no_argument, NULL, 'q'},
+        {"bytecode", no_argument, NULL, 'b'}
+    };
+    int option_index = 0;
+
+    char c;
+    while((c = getopt_long_only(argc, argv, "vbO:", long_options, &option_index)) != -1){
+        switch(c){
+            case 'v':
+                verbose = 1;
+                break;
+            case 'l':
+                /* l option forces codegen = m32 */
+                codegen = bfcc_gen32;
+                output_mode = BFCCOUT_32BIT;
+                break;
+            case 'q':
+                codegen = bfcc_gen64;
+                output_mode = BFCCOUT_64BIT;
+                break;
+            case 'b':
+                /* Platform-independent bytecode */
+                codegen = bfcc_codegen;
+                output_mode = BFCCOUT_BYTECODE;
+                break;
+            case 'O':
+                opt_level = (int32_t)atoi(optarg);
+                break;
+        }
+    }
+
+    if(optind >= argc){
         CriticalError("Must provide a .b source file to compile");
     }
 
-    FILE *input = fopen(argv[1], "r");
+    FILE *input = fopen(argv[optind], "r");
     if(!input){
         CriticalError("Could not open file");
     }
-    strncpy(buf, argv[1], 16);
-    buf[15] = '\0';
-    int i;
-    for(i = 0; i < 13; i++){
-        if(buf[i] == '.')
-            break;
+    size_t ilen = strlen(argv[optind]) + 4;
+    output_fname = (char *)alloca(ilen * sizeof(char));
+    strcpy(output_fname, argv[optind]);
+    char *p = strstr(output_fname, ".b");
+    intptr_t pi = (intptr_t)(p - output_fname);
+    if(output_mode == BFCCOUT_BYTECODE){
+        strcpy(output_fname + pi, ".bc");
+    }else{
+        strcpy(output_fname + pi, ".s");
     }
-    buf[i] = '.';
-    buf[i+1] = 's';
-    buf[i+2] = '\0';
+
+    /* output_fdup - output name, without extension */
+    output_fdup = (char *)alloca(ilen * sizeof(char));
+    strcpy(output_fdup, output_fname);
+    output_fdup[pi] = '\0';
 
     fseek(input, 0L, SEEK_END);
     int32_t f_len = ftell(input) + 1;
@@ -811,14 +903,38 @@ int main(int argc, char **argv){
         apply_filter_file(filters[i], &list);
     }
 
-    FILE *output = fopen(buf, "w");
+    FILE *output = fopen(output_fname, "w");
     if(!output){
         CriticalError("Could not open file");
     }
 
-    bfcc_gen32(output, &list, buf);
+    codegen(output, &list, output_fname);
     fclose(output);
     list_clear(&list, 1);
+
+    const char *gcc_args[] = {
+        "/usr/bin/gcc",
+        "-o", 
+        output_fdup,
+        output_fname,
+        "-m32",         /* XXX Get rid of this when bfcc_gen64 is up */
+        NULL
+    };
+    if(output_mode == BFCCOUT_32BIT){
+        gcc_args[4] = "-m32";
+    }else if(output_mode == BFCCOUT_64BIT){
+        gcc_args[4]=  "-m64";
+    }else if(output_mode == BFCCOUT_BYTECODE){
+        return 0;
+    }
+    exec_and_block(gcc_args[0], gcc_args, (const char **)environ);
+
+    const char *rm_args[] = {
+        "/bin/rm",
+        output_fname,
+        NULL
+    };
+    exec_and_block(rm_args[0], rm_args, (const char **)environ);
 
     return 0;
 }

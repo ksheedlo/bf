@@ -1,0 +1,8 @@
+pattern
+jz L0
+L1:
+sub
+jnz L1
+L0:
+replace
+zero
