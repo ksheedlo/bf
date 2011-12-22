@@ -132,60 +132,91 @@ void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename){
     fprintf(output, "\t pushl\t%%edi\n");
 #endif
     node_t *node = parse_lst->head->next;
+    int32_t refresh_needed = 1;
 
     while(node != parse_lst->head){
         bfop_t *op = node->data;
         switch(op->opcode){
             case INC:
                 fprintf(output, "\t inc\t%%ebx\n");
+                refresh_needed = 1;
                 break;
             case INCV:
                 fprintf(output, "\t addl\t$%d, %%ebx\n", op->arg);
+                refresh_needed = 1;
                 break;
             case DEC:
                 fprintf(output, "\t dec\t%%ebx\n");
+                refresh_needed = 1;
                 break;
             case DECV:
                 fprintf(output, "\t subl\t$%d, %%ebx\n", op->arg);
+                refresh_needed = 1;
                 break;
             case ADD:
-                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t inc\t%%eax\n");
                 fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                refresh_needed = 0;
                 break;
             case ADDV:
-                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t addl\t$%d, %%eax\n", op->arg);
                 fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                refresh_needed = 0;
                 break;
             case SUB:
-                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t dec\t%%eax\n");
                 fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                refresh_needed = 0;
                 break;
             case SUBV:
-                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t subl\t$%d, %%eax\n", op->arg);
                 fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                refresh_needed = 0;
                 break;
             case ZERO:
                 fprintf(output, "\t movb\t$0, (%%ebx)\n");
+                refresh_needed = 1;
                 break;
             case LABEL:
                 fprintf(output, ".L%d:\n", op->arg);
                 break;
             case JNZ:
-                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t test\t%%eax, %%eax\n");
                 fprintf(output, "\t jnz\t.L%d\n", op->arg);
                 break;
             case JZ:
-                fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t test\t%%eax, %%eax\n");
                 fprintf(output, "\t jz\t.L%d\n", op->arg);
                 break;
             case PUT:
-                fprintf(output, "\t movl\t(%%ebx), %%eax\n");
+                if(refresh_needed){
+                    fprintf(output, "\t movl\t(%%ebx), %%eax\n");
+                    refresh_needed = 0;
+                }
                 fprintf(output, "\t movzbl\t%%al, %%eax\n");
                 fprintf(output, "\t movl\t%%eax, (%%esp)\n");
                 fprintf(output, "\t call\tfputc\n");
