@@ -44,3 +44,6 @@ void load_filter(FILE *input, list_t *pattern, list_t *replace);
 void apply_filter_file(char *filename, list_t *parse_lst);
 
 void exec_and_block(const char *filename, const char *argv[], const char *envp[]);
+
+int32_t gen32_find_bestp(int32_t curr, int32_t diff, int32_t *ptrs, int32_t *refresh);
+

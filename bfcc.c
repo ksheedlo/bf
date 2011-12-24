@@ -115,6 +115,40 @@ void bfcc_codegen(FILE *output, list_t *parse_lst, char *filename){
     }
 }
 
+int32_t gen32_find_bestp(int32_t curr, int32_t diff, int32_t *ptrs, int32_t *refresh){
+    /* Given a set of pointer locations and valid flags, return the best 
+     * value to put the next pointer. Hash into a location that's already
+     * loaded if possible, else take the first invalid slot. If that fails,
+     * overwrite the next location.
+     *
+     * Assumptions: Arrays are of length 3.
+     *              Pointer locations are relative to the zeroth entry.
+     * Sets the ptrs and refresh values to the desired result, and returns
+     * the new curr pointer. */
+    
+    /* Best possibility: We already have the pointer we needed */
+    curr = curr % 3;
+    int32_t srch = ptrs[curr] + diff;
+    for(int32_t i = 0; i < 3; i++){
+        if(ptrs[i] == srch && (!refresh[i])){
+            return i;
+        }
+    }
+
+    /* If we get here, we're going to have to do a memory access. Try to do it
+     * without overwriting someone else's registers */
+    for(int32_t i = 0, c = ((curr + 1) % 3); i < 3; i++, c = ((c + 1) % 3)){
+        if(refresh[c]){
+            return c;
+        }
+    }
+
+    /* This is the sucky case */
+    int32_t ret = (curr + 1) % 3;
+    refresh[ret] = 1;
+    return ret;
+}
+
 void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename){
     //Generate 32-bit x86 code.
     fprintf(output, "\t .file\t\"%s\"\n", filename);
@@ -123,109 +157,162 @@ void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename){
     fprintf(output, "\t pushl\t%%ebp\n");
     fprintf(output, "\t movl\t%%esp, %%ebp\n");
     fprintf(output, "\t pushl\t%%ebx\n");
+    fprintf(output, "\t pushl\t%%esi\n");
+    fprintf(output, "\t pushl\t%%edi\n");
     fprintf(output, "\t movl\t8(%%ebp), %%ebx\n");
     fprintf(output, "\t subl\t$8, %%esp\n");
     fprintf(output, "\t movl\tstdout, %%eax\n");
     fprintf(output, "\t movl\t%%eax, 4(%%esp)\n");
-#if 0
-    fprintf(output, "\t pushl\t%%esi\n");
-    fprintf(output, "\t pushl\t%%edi\n");
-#endif
+
     node_t *node = parse_lst->head->next;
-    int32_t refresh_needed = 1;
+
+    /* Try to track 3 different ptr/value combinations with 6 available
+     * registers (ebx/eax, esi/ecx, edi/edx) */
+    int32_t refresh_vals = {1, 1, 1};
+    int32_t refresh_ptrs = {1, 1, 1};
+
+    int32_t ptr_locs[] = {0, 0, 0};
+    int32_t curr_ptr = 2;  /* uninitialized */
+
+    /* We use callee-save registers for the pointers because it's harder to 
+     * get them back if we lose them. The values are just a memory access */
+    char *ptr_regs[] = {"ebx", "esi", "edi"};
+    char *val_regs[] = {"eax", "ecx", "edx"};
+    char *val_bregs[] = {"al", "cl", "dl"};
 
     while(node != parse_lst->head){
         bfop_t *op = node->data;
         switch(op->opcode){
             case INC:
-                fprintf(output, "\t inc\t%%ebx\n");
-                refresh_needed = 1;
+                int32_t old_ptr = curr_ptr;
+                curr_ptr = gen32_find_bestp(curr_ptr, 1, ptr_locs, refresh_ptrs);
+                if(refresh_ptrs[curr_ptr]){
+                    fprintf(output, "\t leal\t1(%%%s), %%%s\n", 
+                        ptr_regs[old_ptr], ptr_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 1;
+                }
                 break;
             case INCV:
-                fprintf(output, "\t addl\t$%d, %%ebx\n", op->arg);
-                refresh_needed = 1;
+                int32_t old_ptr = curr_ptr;
+                curr_ptr = gen32_find_bestp(curr_ptr, op->arg, ptr_locs, refresh_ptrs);
+                if(refresh_ptrs[curr_ptr]){
+                    fprintf(output, "\t leal\t%d(%%%s), %%%s\n", 
+                        op->arg, ptr_regs[old_ptr], ptr_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 1;
+                }
                 break;
             case DEC:
-                fprintf(output, "\t dec\t%%ebx\n");
-                refresh_needed = 1;
+                int32_t old_ptr = curr_ptr;
+                curr_ptr = gen32_find_bestp(curr_ptr, -1, ptr_locs, refresh_ptrs);
+                if(refresh_ptrs[curr_ptr]){
+                    fprintf(output, "\t leal\t-1(%%%s), %%%s\n", 
+                        ptr_regs[old_ptr], ptr_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 1;
+                }
                 break;
             case DECV:
-                fprintf(output, "\t subl\t$%d, %%ebx\n", op->arg);
-                refresh_needed = 1;
+                int32_t old_ptr = curr_ptr;
+                curr_ptr = gen32_find_bestp(curr_ptr, -(op->arg), 
+                                ptr_locs, refresh_ptrs);
+                if(refresh_ptrs[curr_ptr]){
+                    fprintf(output, "\t leal\t%d(%%%s), %%%s\n", 
+                        -(op->arg), ptr_regs[old_ptr], ptr_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 1;
+                }
                 break;
             case ADD:
-                if(refresh_needed){
-                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n",
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t inc\t%%eax\n");
-                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
-                refresh_needed = 0;
+                fprintf(output, "\t inc\t%%%s\n", val_regs[curr_ptr]);
+                fprintf(output, "\t movb\t%%%s, (%%%s)\n", val_bregs[curr_ptr],
+                    ptr_regs[curr_ptr]);
                 break;
             case ADDV:
-                if(refresh_needed){
-                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n",
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t addl\t$%d, %%eax\n", op->arg);
-                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
-                refresh_needed = 0;
+                fprintf(output, "\t addl\t$%d, %%%s\n", op->arg, val_regs[curr_ptr]);
+                fprintf(output, "\t movb\t%%%s, (%%%s)\n", val_bregs[curr_ptr],
+                    ptr_regs[curr_ptr]);
                 break;
             case SUB:
-                if(refresh_needed){
-                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n",
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t dec\t%%eax\n");
-                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
-                refresh_needed = 0;
+                fprintf(output, "\t dec\t%%%s\n", val_regs[curr_ptr]);
+                fprintf(output, "\t movb\t%%%s, (%%%s)\n", val_bregs[curr_ptr],
+                    ptr_regs[curr_ptr]);
                 break;
             case SUBV:
-                if(refresh_needed){
-                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n",
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t subl\t$%d, %%eax\n", op->arg);
-                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
-                refresh_needed = 0;
+                fprintf(output, "\t subl\t$%d, %%%s\n", op->arg, val_regs[curr_ptr]);
+                fprintf(output, "\t movb\t%%%s, (%%%s)\n", val_bregs[curr_ptr],
+                    ptr_regs[curr_ptr]);
                 break;
             case ZERO:
-                fprintf(output, "\t movb\t$0, (%%ebx)\n");
-                refresh_needed = 1;
+                fprintf(output, "\t xorl\t%%%s, %%%s\n", val_regs[curr_ptr],
+                    val_regs[curr_ptr]);
+                fprintf(output, "\t movb\t%%%s, (%%%s)\n", val_bregs[curr_ptr],
+                    ptr_regs[curr_ptr]);
+                refresh_vals[curr_ptr] = 0;
                 break;
             case LABEL:
+                /* TODO: Figure out how we're going to handle curr_ptr assumptions
+                 *  and refresh requirements around loops. A stack might be a 
+                 *  good idea */
                 fprintf(output, ".L%d:\n", op->arg);
+                for(int i = 0; i < 3; i++){
+                    refresh_ptrs[i] = refresh_vals[i] = 1;
+                }
                 break;
             case JNZ:
-                if(refresh_needed){
-                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n", 
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t test\t%%eax, %%eax\n");
+                fprintf(output, "\t test\t%%%s, %%%s\n", val_regs[curr_ptr], 
+                    val_regs[curr_ptr]);
                 fprintf(output, "\t jnz\t.L%d\n", op->arg);
                 break;
             case JZ:
-                if(refresh_needed){
-                    fprintf(output, "\t movzbl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n", 
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t test\t%%eax, %%eax\n");
+                fprintf(output, "\t test\t%%%s, %%%s\n", val_regs[curr_ptr], 
+                    val_regs[curr_ptr]);
                 fprintf(output, "\t jz\t.L%d\n", op->arg);
                 break;
             case PUT:
-                if(refresh_needed){
-                    fprintf(output, "\t movl\t(%%ebx), %%eax\n");
-                    refresh_needed = 0;
+                if(refresh_vals[curr_ptr]){
+                    fprintf(output, "\t movzbl\t(%%%s), %%%s\n", 
+                        ptr_regs[curr_ptr], val_regs[curr_ptr]);
+                    refresh_vals[curr_ptr] = 0;
                 }
-                fprintf(output, "\t movzbl\t%%al, %%eax\n");
-                fprintf(output, "\t movl\t%%eax, (%%esp)\n");
+                fprintf(output, "\t movzbl\t%%%s, %%%s\n", val_bregs[curr_ptr],
+                    val_regs[curr_ptr]);
+                fprintf(output, "\t movl\t%%%s, (%%esp)\n", val_regs[curr_ptr]);
                 fprintf(output, "\t call\tfputc\n");
                 break;
             case GET:
-                fprintf(output, "\t movl\tstdin, %%eax\n");
-                fprintf(output, "\t movl\t%%eax, (%%esp)\n");
+                fprintf(output, "\t movl\tstdin, %%%s\n", val_regs[curr_ptr]);
+                fprintf(output, "\t movl\t%%%s, (%%esp)\n", val_regs[curr_ptr]);
                 fprintf(output, "\t call\tfgetc\n");
-                fprintf(output, "\t movb\t%%al, (%%ebx)\n");
+                fprintf(output, "\t movb\t%%%s, (%%%s)\n", val_bregs[curr_ptr],
+                    ptr_regs[curr_ptr]);
                 break;
         }
         node = node->next;
@@ -237,6 +324,8 @@ void bfcc_gen32(FILE *output, list_t *parse_lst, char *filename){
     fprintf(output, "\t popl\t%%esi\n");
 #endif
     fprintf(output, "\t addl\t$8, %%esp\n");
+    fprintf(output, "\t popl\t%%edi\n");
+    fprintf(output, "\t popl\t%%esi\n");
     fprintf(output, "\t popl\t%%ebx\n");
     fprintf(output, "\t popl\t%%ebp\n");
     fprintf(output, "\t ret\n\t .size\tbf_prog, .-bf_prog\n");
